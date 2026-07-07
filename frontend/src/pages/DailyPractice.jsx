@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import scenesData from '../data/scenes'
 import { useErrorSentences, useTimer, recordDailySession } from '../hooks/useStorage'
+import { speakTextWithBrowser } from '../services/api'
 
 const PHASES = [
   { key: 'review', title: '复习昨日错句', minutes: 3, icon: '📝' },
@@ -17,6 +18,7 @@ export default function DailyPractice() {
   const [currentPhase, setCurrentPhase] = useState(0);
   const [phaseStatus, setPhaseStatus] = useState('ready'); // ready | active | done
   const [selectedScene, setSelectedScene] = useState(null);
+  const [playingIndex, setPlayingIndex] = useState(-1);
 
   // 随机选择一个场景用于今日学习
   useEffect(() => {
@@ -72,6 +74,16 @@ export default function DailyPractice() {
     navigate(`/chat/${selectedScene?.id || 'airport'}`);
   };
 
+  const playSentence = async (text, index) => {
+    setPlayingIndex(index);
+    try {
+      await speakTextWithBrowser(text);
+    } catch (err) {
+      console.error('播放失败:', err);
+    }
+    setPlayingIndex(-1);
+  };
+
   return (
     <div className="px-5 pt-8 pb-4">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">今日20分钟训练</h1>
@@ -121,11 +133,34 @@ export default function DailyPractice() {
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {errorSentences.slice(0, 5).map((err, i) => (
-                  <div key={i} className="bg-orange-50 p-3 rounded-xl">
-                    <div className="text-sm font-medium text-gray-800">{err.sentence?.en || '—'}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {err.sentence?.zh} · 得分: <span className="text-orange-500 font-bold">{err.score}</span>
+                  <div key={i} className="bg-orange-50 p-3 rounded-xl flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-800">{err.sentence?.en || '—'}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {err.sentence?.zh} · 得分: <span className="text-orange-500 font-bold">{err.score}</span>
+                      </div>
                     </div>
+                    {err.sentence?.en && (
+                      <button
+                        onClick={() => playSentence(err.sentence.en, `review-${i}`)}
+                        disabled={playingIndex === `review-${i}`}
+                        className={`ml-3 w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                          playingIndex === `review-${i}`
+                            ? 'bg-orange-100 text-orange-400'
+                            : 'bg-orange-100 text-orange-500 active:scale-90'
+                        }`}
+                      >
+                        {playingIndex === `review-${i}` ? (
+                          <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M3 22v-20l18 10-18 10z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -146,9 +181,30 @@ export default function DailyPractice() {
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {selectedScene.sentences.filter(s => s.key).slice(0, 8).map((s, i) => (
-                    <div key={i} className="bg-gray-50 p-3 rounded-xl">
-                      <div className="text-sm font-medium text-gray-800">{s.en}</div>
-                      <div className="text-xs text-gray-400 mt-1">{s.zh}</div>
+                    <div key={i} className="bg-gray-50 p-3 rounded-xl flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-800">{s.en}</div>
+                        <div className="text-xs text-gray-400 mt-1">{s.zh}</div>
+                      </div>
+                      <button
+                        onClick={() => playSentence(s.en, i)}
+                        disabled={playingIndex === i}
+                        className={`ml-3 w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                          playingIndex === i
+                            ? 'bg-indigo-100 text-indigo-400'
+                            : 'bg-indigo-50 text-indigo-500 active:scale-90'
+                        }`}
+                      >
+                        {playingIndex === i ? (
+                          <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M3 22v-20l18 10-18 10z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        )}
+                      </button>
                     </div>
                   ))}
                 </div>
