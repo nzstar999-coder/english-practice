@@ -26,6 +26,72 @@ export default function AiChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // 本地模拟回复（无后端API时使用）
+  const getFallbackMessage = useCallback((sceneId, type) => {
+    const fallbacks = {
+      airport: {
+        init: "Hello! Welcome to the airport. Where are you flying today?",
+        reply: [
+          "That's a great destination! Have you checked in online yet?",
+          "Your gate is B12. Do you need help finding it?",
+          "How many bags are you checking in today?",
+          "Would you like a window seat or an aisle seat?",
+          "Do you have your passport ready? I'll need to see it.",
+          "Your flight is on time. Is there anything else I can help with?",
+        ]
+      },
+      hotel: {
+        init: "Good afternoon! Welcome to our hotel. Do you have a reservation?",
+        reply: [
+          "Let me check you in. Could I see your ID please?",
+          "Your room is on the 5th floor. Would you like help with your luggage?",
+          "Breakfast is served from 7 to 10 AM. Would you like to add that?",
+          "Is there anything else you need for your stay?",
+          "The gym and pool are on the 3rd floor. Enjoy your stay!",
+          "Check-out time is 11 AM. Would you like a late check-out?",
+        ]
+      },
+      restaurant: {
+        init: "Good evening! Table for how many people tonight?",
+        reply: [
+          "Right this way please. Here's your menu.",
+          "Our specials today are grilled salmon and pasta. Any questions?",
+          "Are you ready to order, or do you need a few more minutes?",
+          "Would you like something to drink while you look at the menu?",
+          "How is everything? Is your meal okay?",
+          "Would you like to see the dessert menu?",
+        ]
+      },
+      shopping: {
+        init: "Hi there! Can I help you find something today?",
+        reply: [
+          "What size are you looking for? We have small to extra large.",
+          "That looks great on you! Would you like to try another color?",
+          "This one is on sale, 30% off. It's a great deal!",
+          "Would you like me to check if we have this in your size?",
+          "We also have matching accessories. Would you like to see them?",
+          "Cash or card? Would you like a receipt?",
+        ]
+      },
+      hospital: {
+        init: "Hello, how can I help you today? Do you have an appointment?",
+        reply: [
+          "Please take a seat. The doctor will see you shortly.",
+          "Can you describe your symptoms? When did they start?",
+          "Have you taken any medicine for this?",
+          "I'm going to check your temperature and blood pressure now.",
+          "The doctor recommends some rest and these medications.",
+          "Do you have any allergies I should know about?",
+        ]
+      },
+    };
+
+    const scene = fallbacks[sceneId] || fallbacks.airport;
+    if (type === 'init') return scene.init;
+    const replies = scene.reply;
+    return replies[Math.floor(Math.random() * replies.length)];
+  }, []);
+
   // 初始化：AI先开始对话
   useEffect(() => {
     if (!scene || messages.length > 0) return;
@@ -46,8 +112,11 @@ export default function AiChat() {
       // 自动播放AI的消息
       speakTextWithBrowser(aiMessage).catch(() => {});
     } catch (err) {
-      console.error('初始化对话失败:', err);
-      setMessages([{ role: 'assistant', content: 'Hello! How can I help you today?' }]);
+      console.error('初始化对话失败，使用本地模拟:', err);
+      const fallbackMsg = getFallbackMessage(sceneId, 'init');
+      setMessages([{ role: 'assistant', content: fallbackMsg }]);
+      // API失败时也用浏览器TTS朗读
+      speakTextWithBrowser(fallbackMsg).catch(() => {});
     }
     setIsLoading(false);
   };
@@ -78,8 +147,11 @@ export default function AiChat() {
       // 自动播放AI的消息
       speakTextWithBrowser(aiMessage).catch(() => {});
     } catch (err) {
-      console.error('AI回复失败:', err);
-      setMessages([...newMessages, { role: 'assistant', content: 'Sorry, could you repeat that?' }]);
+      console.error('AI回复失败，使用本地模拟:', err);
+      const fallbackMsg = getFallbackMessage(sceneId, 'reply');
+      setMessages([...newMessages, { role: 'assistant', content: fallbackMsg }]);
+      // API失败时也用浏览器TTS朗读
+      speakTextWithBrowser(fallbackMsg).catch(() => {});
     }
     setIsLoading(false);
   };
