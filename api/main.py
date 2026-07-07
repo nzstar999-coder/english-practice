@@ -101,10 +101,11 @@ async def get_config():
 @app.post("/api/llm/chat")
 async def llm_chat(request: ChatRequest):
     if not LLM_API_KEY:
+        print("LLM: No API Key configured, using mock")
         return JSONResponse(content={
             "content": generate_mock_response(request.messages),
             "role": "assistant",
-            "model": "mock",
+            "model": "mock-no-key",
         })
 
     try:
@@ -122,6 +123,7 @@ async def llm_chat(request: ChatRequest):
             if request.response_format:
                 body["response_format"] = request.response_format
 
+            print(f"LLM: Calling {LLM_API_BASE}/chat/completions with model={LLM_MODEL}")
             response = await client.post(
                 f"{LLM_API_BASE}/chat/completions",
                 headers=headers,
@@ -129,14 +131,16 @@ async def llm_chat(request: ChatRequest):
             )
 
             if response.status_code != 200:
+                print(f"LLM: API returned {response.status_code}: {response.text[:500]}")
                 return JSONResponse(content={
                     "content": generate_mock_response(request.messages),
                     "role": "assistant",
-                    "model": "mock-fallback",
+                    "model": f"mock-status-{response.status_code}",
                 })
 
             data = response.json()
             choice = data["choices"][0]["message"]
+            print(f"LLM: Success, model={data.get('model', '')}")
             return JSONResponse(content={
                 "content": choice["content"],
                 "role": choice.get("role", "assistant"),

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import scenesData from '../data/scenes'
-import { chatWithAI, getConversationSummary, speakTextWithBrowser } from '../services/api'
+import { chatWithAI, getConversationSummary, speakTextWithBrowser, recognizeSpeech } from '../services/api'
 import { addConversationRecord, completeLevel } from '../hooks/useStorage'
 
 export default function AiChat() {
@@ -16,10 +16,12 @@ export default function AiChat() {
   const [summary, setSummary] = useState(null);
   const [isEnded, setIsEnded] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [recognizedText, setRecognizedText] = useState('');
 
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const streamRef = useRef(null);
 
   // 滚动到底部
   useEffect(() => {
@@ -192,11 +194,19 @@ export default function AiChat() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : 'audio/webm'
-      });
+      streamRef.current = stream;
+
+      // iPhone Safari 不支持 webm，使用 mp4
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/webm';
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -207,16 +217,28 @@ export default function AiChat() {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        // 这里可以调用语音识别API
-        // 简化版：直接用语音输入，实际项目中这里会调用STT API
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         setIsRecording(false);
+
+        // 尝试调用语音识别API
+        try {
+          const result = await recognizeSpeech(blob);
+          const text = result.text || '';
+          if (text.trim()) {
+            setRecognizedText(text);
+            sendMessage(text);
+          }
+        } catch (err) {
+          console.error('语音识别失败:', err);
+          // 识别失败时，提示用户手动输入
+          setRecognizedText('');
+        }
       };
 
       mediaRecorder.start(100);
       setIsRecording(true);
 
-      // 最长10秒
+      // 最长10秒自动停止
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           mediaRecorderRef.current.stop();
